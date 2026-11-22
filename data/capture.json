@@ -127,6 +127,26 @@
         3,
         6
       ]
+    ],
+    "head_limits": {
+      "left": {
+        "max_response_entries": 12
+      },
+      "right": {
+        "max_response_entries": 12
+      }
+    },
+    "query_replay": [
+      {
+        "request": "new-range",
+        "head": "right",
+        "reply_calibration": "c1"
+      },
+      {
+        "request": "new-range",
+        "head": "right",
+        "reply_calibration": "c2"
+      }
     ]
   },
   "tensors": {
