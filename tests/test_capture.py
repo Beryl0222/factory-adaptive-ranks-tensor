@@ -20,3 +20,8 @@ class CaptureTests(unittest.TestCase):
         self.assertEqual(a["pending"].shape, a["complete"].shape)
         self.assertTrue(np.any(a["pending"] != a["complete"]))
         self.assertLess(len(set(r["calibration"]["c1"]["right"])), len(r["calibration"]["c1"]["right"]))
+        frames = {frame["id"]: frame for frame in r["frames"]}
+        for reply in r["query_replay"]:
+            self.assertIn(reply["request"], frames)
+            self.assertIn(reply["query"], r["queries"])
+            self.assertIn(reply["reply_calibration"], r["calibration"])
