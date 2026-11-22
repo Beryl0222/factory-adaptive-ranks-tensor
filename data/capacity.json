@@ -1,0 +1,16 @@
+{
+  "grid": [
+    4096,
+    3072
+  ],
+  "materials": 12,
+  "code_bits": 9,
+  "physical_radius": [
+    5,
+    10,
+    20,
+    40
+  ],
+  "peak_scratch_bytes": 33554432,
+  "seed": 442
+}
