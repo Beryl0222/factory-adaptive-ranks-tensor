@@ -22,3 +22,70 @@ python -m unittest discover -s tests -v
 ```
 
 现有检查核对采集格式和所附数据的结构。
+
+## 自适应分位滤波算子（quantop）
+
+`quantop` 是可复用的分块自适应分位滤波算子，把新测量片从检测路径接到校正后
+分位、见证与超差交接状态。
+
+| 模块 | 职责 |
+| --- | --- |
+| `quantop/geometry.py` | 格网、闭合轴对齐矩形物理窗口、分块晕圈与 `ScratchBudget` 工作区记账 |
+| `quantop/calibration.py` | 按读头与版本绑定的单调定标表，允许平台区 |
+| `quantop/heads.py` | 读头协议：码值频次分页、码值样本身份分页；读头只持有自己辖区的原始码 |
+| `quantop/merge.py` | 跨读头并列样本的分页 k 路稳定归并与见证找回 |
+| `quantop/operator.py` | 自适应选窗、`ceil(q*n)` 分位、秩见证、可交付性证明与超差判定 |
+| `quantop/handoff.py` | 相邻帧过渡与半径/秩/定标三类变化归因 |
+| `quantop/pipeline.py` | 采集记录装配、`query_replay` 旧版回放治理与交接 JSON 产出 |
+
+### 判定语义
+
+- **窗口**：对材料公布的物理半径序列从小到大开窗，横纵跨度都按物理单位
+  （`|dr|*行间距`、`|dc|*列间距` 与半径比较），窗口是含端点的轴对齐矩形。
+- **样本**：只取同材料类属且状态为 1 的读数；已知零值照常参与，状态 0 的未读
+  样本没有秩次，状态 -1 的永久无读数既不入秩也不算补交潜力。选第一个有效样本
+  数达到材料门槛的邻域，不跨材料缝、不填零。
+- **秩与分位**：各读头按自己绑定的定标表把码换算成整数物理值，按物理值升序，
+  物理值并列时按全局样本 ID（行列字典序）升序；分位是距首项起第
+  `ceil(q*n)` 项，q 为有理数，全部用整数运算。平台区横跨两个读头时，见证从
+  所有并列样本的归并序列中找回，不能用分位值代替见证。
+- **超差**：目标物理值与分位物理值的绝对差达到材料阈值。
+- **可交付性**：只有证明后续可达资料不改变邻域选择与秩见证才发布。更小半径在
+  所有待补同材格点补交后仍达不到门槛（不会缩回），且选中窗口内没有待补同材
+  格点（秩不会移动）时才交付；否则标记 `undecided` 并给出原因，其他位置无需
+  全幅停等。
+- **定标治理**：换版只适用于归它管辖的读头值；落在旧版的应答被拒绝，只有按
+  同一版输入完整重算齐备后才交付，重算仍不齐则保持待判定。
+- **隐私与预算**：汇合端只能拿到频次页与身份页，完整窗口码值不离开读头；
+  算子按 band 分块申请工作区，峰值由 `ScratchBudget` 对照容量文件上限记账，
+  不物化每位置邻域副本。
+
+### 运行
+
+```sh
+# 端到端跑出校正后分位、见证、超差与交接归因
+python -m quantop.pipeline data/capture.json data/capacity.json -o out/handoff.json
+```
+
+处理不可信来源的资料时用隔离模式，并以参数传入路径：
+
+```sh
+python -I -c "import sys; sys.path.insert(0, '.'); \
+from pathlib import Path; from quantop.pipeline import run_capture; \
+run_capture(Path('data/capture.json'), Path('data/capacity.json'))"
+```
+
+### 交接产物
+
+每个位置回查 `selected_radius`、`valid_count`、`quantile_value`、
+`witness_id`、`target_value`、`out_of_tolerance`、`delivery` 与每个半径的
+有效/待补计数链；`transitions` 给出相邻帧的单一主因：
+
+- `radius`：补交同材带使位置从大窗口缩回小窗口；
+- `rank`：同半径同定标下秩次或并列见证移动；
+- `calibration`：定标换版；分位值不变但平台区见证换读头时显式标注，
+  避免复查人员按旧测量点追查。
+
+`replay_events` 记录每次应答的读头、操作与定标版，被拒的旧版应答
+`accepted=false`。
+
